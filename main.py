@@ -1,6 +1,6 @@
 import logging
 from json import load
-from telegram import *
+from telegram import InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler
 from hsubs import ScheduleGenerator
 from database import insert_show, insert_user, check_user_exists, get_show_id_by_name, check_subscribed,\
@@ -33,7 +33,7 @@ def build_button_list(days=False, show=False, rtitle=None, gen_whichday=None, u_
     given state
     """
     if days:
-       return InlineKeyboardMarkup(([[InlineKeyboardButton(day, callback_data=day)] for day in sc.days]))
+        return InlineKeyboardMarkup(([[InlineKeyboardButton(day, callback_data=day)] for day in sc.days]))
 
     if show:
         buttons = []
