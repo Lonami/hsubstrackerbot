@@ -17,9 +17,6 @@ class ScheduleGenerator:
         self.req = requests.get(self.schedulelink)
         self.tree = html.fromstring(self.req.text)
         self.id = 0
-        self.tablelen = None
-        self.title = None
-        self.time = None
 
     def iter_schedule(self, days=None):
         if not days:
@@ -31,12 +28,13 @@ class ScheduleGenerator:
             # tables start from 1 rather than from 0, 1 day = 1 table
             dayindex = self.days.index(day) + 1
             expr_str = f'//*[@id="post-63"]/div/table[{dayindex}]'
-            self.tablelen = len(self.tree.xpath(expr_str)[0].getchildren())
 
-            for table in range(self.tablelen):
-                self.title = self.tree.xpath(expr_str)[0].getchildren()[table].getchildren()[0].getchildren()[0].text
-                self.time = self.tree.xpath(expr_str)[0].getchildren()[table].getchildren()[1].text
-                yield self.show(day, self.title, self.time)
+            table = self.tree.xpath(expr_str)[0].getchildren()
+
+            for item in table:
+                title = item.getchildren()[0].getchildren()[0].text
+                time = item.getchildren()[1].text
+                yield self.show(day, title, time)
 
     def update_schedule(self):
         self.req = requests.get(self.schedulelink)
