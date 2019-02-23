@@ -88,7 +88,6 @@ def handle_button_press(bot, update):
             bot.answerCallbackQuery(callback_query_id=cbq_id)
 
         else:
-
             day_context = update.callback_query.message.text.split(' ')[5]
             insert_subscription(cht_id, get_show_id_by_name(callback_query))
             bot.editMessageReplyMarkup(chat_id=cht_id, message_id=msg_id,
