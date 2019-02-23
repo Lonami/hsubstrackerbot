@@ -28,7 +28,6 @@ class ScheduleGenerator:
             # tables start from 1 rather than from 0, 1 day = 1 table
             dayindex = self.days.index(day) + 1
             expr_str = f'//*[@id="post-63"]/div/table[{dayindex}]'
-
             table = self.tree.xpath(expr_str)[0].getchildren()
 
             for item in table:

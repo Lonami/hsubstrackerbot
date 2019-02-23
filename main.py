@@ -41,8 +41,8 @@ def build_button_list(days=False, show=False, rtitle=None, gen_whichday=None, u_
 
         for show in sc.iter_schedule(gen_whichday):
             if rtitle == show.title or check_subscribed(userid=u_id, showid=get_show_id_by_name(show.title)):
-                buttons.append([InlineKeyboardButton(f'{show.title}'
-                                                     f' @ {show.time} PST ✅',
+                buttons.append([InlineKeyboardButton(f'✅ {show.title}'
+                                                     f' @ {show.time} PST',
                                                      callback_data=show.title)])
             else:
                 buttons.append([InlineKeyboardButton(f'{show.title} @ {show.time} PST', callback_data=show.title)])
@@ -60,6 +60,7 @@ def handle_button_press(bot, update):
     message editing
     """
     callback_query = update.callback_query.data.split('@')[0]
+    cbq_id = update.callback_query.id
     msg_id = update.callback_query.message.message_id
     cht_id = update.callback_query.message.chat.id
 
@@ -68,12 +69,14 @@ def handle_button_press(bot, update):
                             chat_id=cht_id, message_id=msg_id)
         bot.editMessageReplyMarkup(chat_id=cht_id, message_id=msg_id,
                                    reply_markup=build_button_list(show=True, gen_whichday=callback_query, u_id=cht_id))
+        bot.answerCallbackQuery(callback_query_id=cbq_id)
 
 
     elif 'back' in callback_query:
         bot.editMessageText(text=config['en_gb']['pick_day'],
                             chat_id=cht_id, message_id=msg_id)
         bot.editMessageReplyMarkup(chat_id=cht_id, message_id=msg_id, reply_markup=build_button_list(days=True))
+        bot.answerCallbackQuery(callback_query_id=cbq_id)
 
     else:
         if check_subscribed(cht_id, get_show_id_by_name(callback_query)):
@@ -82,13 +85,16 @@ def handle_button_press(bot, update):
             bot.editMessageReplyMarkup(chat_id=cht_id, message_id=msg_id,
                                        reply_markup=build_button_list(show=True, gen_whichday=day_context,
                                                                       u_id=cht_id))
+            bot.answerCallbackQuery(callback_query_id=cbq_id)
 
         else:
+
             day_context = update.callback_query.message.text.split(' ')[5]
             insert_subscription(cht_id, get_show_id_by_name(callback_query))
             bot.editMessageReplyMarkup(chat_id=cht_id, message_id=msg_id,
                                        reply_markup=build_button_list(show=True, gen_whichday=day_context,
                                                                       rtitle=callback_query, u_id=cht_id))
+            bot.answerCallbackQuery(callback_query_id=cbq_id)
 
 
 def start_command(bot, update):
@@ -112,12 +118,9 @@ def start_command(bot, update):
 
 def main():
     show_insert_loop(sc)
-
     updater = Updater(config['token'])
-    bot = Bot(token=config['token'])
 
     dp = updater.dispatcher
-
     dp.add_handler(CommandHandler("start", start_command))
     dp.add_handler(CallbackQueryHandler(handle_button_press))
 
