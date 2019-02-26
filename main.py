@@ -1,4 +1,8 @@
 import logging
+from datetime import datetime, timedelta
+from pytz import timezone
+from time import strptime
+from threading import Timer
 from json import load
 from telegram import InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler
@@ -115,9 +119,42 @@ def start_command(bot, update):
         bot.sendMessage(chat_id=update.message.chat_id, text=config['en_gb']['pm_only'])
 
 
+def calc_time(sleep=None):
+    """
+    Calculates how much time there is until the next show release
+    by subtracting the current time from the show release time (release_time - current_time)
+    until we get a positive time delta (how much time is remaining until we have to do things)
+    """
+    print('calc_time entered...')
+    day = datetime.now().weekday()
+    day = 3 # debug purposes
+    for show in sc.iter_schedule(sc.days[day]):
+        pst = datetime.now(timezone('US/Pacific')) # what's a daylight savings? (March = oof)
+        pst_n = strptime(pst.strftime('%H:%M'), '%H:%M') # current time
+        showtime = strptime(show.time, '%H:%M') # show - upcoming or past
+
+        s_td = timedelta(hours=showtime.tm_hour, minutes=showtime.tm_min)
+        pst_td = timedelta(hours=pst_n.tm_hour, minutes=pst_n.tm_min)
+
+        final_td = int((s_td - pst_td).total_seconds())
+
+        if final_td > 0:
+            print(f'{show.title}, upcoming in {final_td} seconds.')
+        else:
+            print(f'{show.title} aired in {final_td} seconds.')
+
+    #stuff for later
+    # t = Timer(sleep, send_notif)
+    # t.start()
+
+def send_notif():
+    pass
+
 def main():
     show_insert_loop(sc)
     updater = Updater(config['token'])
+
+    calc_time()
 
     dp = updater.dispatcher
     dp.add_handler(CommandHandler("start", start_command))
