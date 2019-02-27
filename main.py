@@ -4,11 +4,11 @@ from pytz import timezone
 from time import strptime
 from threading import Timer
 from json import load
-from telegram import InlineKeyboardMarkup, InlineKeyboardButton
+from telegram import InlineKeyboardMarkup, InlineKeyboardButton, Bot
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler
 from hsubs import ScheduleGenerator
-from database import insert_show, insert_user, check_user_exists, get_show_id_by_name, check_subscribed,\
-                     insert_subscription, remove_subscription, TransactionIntegrityError
+from database import *
+
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                     level=logging.DEBUG)
@@ -19,6 +19,7 @@ sc = ScheduleGenerator()
 
 config = load(open('config.json', 'r'))
 
+
 def show_insert_loop(schedule: ScheduleGenerator):
     """
     Grabs all the shows from the schedule and inserts them
@@ -26,7 +27,7 @@ def show_insert_loop(schedule: ScheduleGenerator):
     """
     for show in schedule.iter_schedule():
         try:
-            insert_show(show.title, show.day, show.time)
+            insert_show(show.title, show.day, show.time, show.link)
         except TransactionIntegrityError:
             pass
 
@@ -75,7 +76,6 @@ def handle_button_press(bot, update):
                                    reply_markup=build_button_list(show=True, gen_whichday=callback_query, u_id=cht_id))
         bot.answerCallbackQuery(callback_query_id=cbq_id)
 
-
     elif 'back' in callback_query:
         bot.editMessageText(text=config['en_gb']['pick_day'],
                             chat_id=cht_id, message_id=msg_id)
@@ -84,7 +84,7 @@ def handle_button_press(bot, update):
 
     else:
         if check_subscribed(cht_id, get_show_id_by_name(callback_query)):
-            day_context = update.callback_query.message.text.split(' ')[5] # what a hack
+            day_context = update.callback_query.message.text.split(' ')[5]  # what a hack
             remove_subscription(cht_id, get_show_id_by_name(callback_query))
             bot.editMessageReplyMarkup(chat_id=cht_id, message_id=msg_id,
                                        reply_markup=build_button_list(show=True, gen_whichday=day_context,
@@ -119,42 +119,56 @@ def start_command(bot, update):
         bot.sendMessage(chat_id=update.message.chat_id, text=config['en_gb']['pm_only'])
 
 
-def calc_time(sleep=None):
+def calc_time(bot_inst):
     """
     Calculates how much time there is until the next show release
     by subtracting the current time from the show release time (release_time - current_time)
     until we get a positive time delta (how much time is remaining until we have to do things)
     """
-    print('calc_time entered...')
+    print('calc_time entered...\n')
     day = datetime.now().weekday()
-    day = 3 # debug purposes
+    notif_offset = 300
+    calc_offset = 5
+    # day = 0 # debug
     for show in sc.iter_schedule(sc.days[day]):
-        pst = datetime.now(timezone('US/Pacific')) # what's a daylight savings? (March = oof)
-        pst_n = strptime(pst.strftime('%H:%M'), '%H:%M') # current time
-        showtime = strptime(show.time, '%H:%M') # show - upcoming or past
+        pst = datetime.now(timezone('US/Pacific'))  # what's a daylight savings? (March = oof)
+        pst_n = strptime(pst.strftime('%H:%M'), '%H:%M')  # current time
+        showtime = strptime(show.time, '%H:%M')  # show - upcoming or past
 
         s_td = timedelta(hours=showtime.tm_hour, minutes=showtime.tm_min)
         pst_td = timedelta(hours=pst_n.tm_hour, minutes=pst_n.tm_min)
 
         final_td = int((s_td - pst_td).total_seconds())
+        # final_td = 10  # debug
 
         if final_td > 0:
             print(f'{show.title}, upcoming in {final_td} seconds.')
-        else:
-            print(f'{show.title} aired in {final_td} seconds.')
+            notif_timer = Timer(final_td + notif_offset, send_notif, [bot_inst, show.title])
+            # calc_time timer should ideally start a few seconds after the notif_timer
+            # don't forget the ~5 minute show delay, to allow the episode to be uploaded
+            # add the episode upload delay in the notif_send, we want time calculation to still be accurate
+            # This needs testing
+            calc_timer = Timer((final_td + calc_offset), calc_time, [bot_inst])
+            notif_timer.start()
+            calc_timer.start()
+            return
 
-    #stuff for later
-    # t = Timer(sleep, send_notif)
-    # t.start()
 
-def send_notif():
-    pass
+def send_notif(bot, show_title):
+    print('Send notif entered...\n')
+    for user in return_users_subbed(get_show_id_by_name(show_title)):
+        try:
+            bot.sendMessage(chat_id=user, text=f'{show_title} has aired!')
+        except Exception as e:
+            logger.warning(f'send_notif failed with exception: {e}')
+            print(e)
+
 
 def main():
     show_insert_loop(sc)
     updater = Updater(config['token'])
-
-    calc_time()
+    bot = Bot(config['token'])
+    calc_time(bot)
 
     dp = updater.dispatcher
     dp.add_handler(CommandHandler("start", start_command))
@@ -162,6 +176,7 @@ def main():
 
     updater.start_polling()
     updater.idle()
+
 
 if __name__ == '__main__':
     main()
