@@ -1,5 +1,6 @@
 {
   "token": "<place_your_token_here>",
+  "root_user": "<your_user_id_here>",
   "en_gb":{
     "greet_seen": "Hello there! I've seen you before! Sending buttons...",
     "greet_notseen": "Hello there! I haven't seen you before. Sending buttons...",
