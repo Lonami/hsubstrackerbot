@@ -12,8 +12,9 @@ class ScheduleGenerator:
     def __init__(self):
         self.config = load(open('config.json', 'r'))
         self.days = self.config['en_gb']['day_array']
-        self.show = namedtuple('Show', ['day', 'title', 'time'])
+        self.show = namedtuple('Show', ['day', 'title', 'time', 'link'])
         self.schedulelink = 'https://horriblesubs.info/release-schedule/'
+        self.baselink = 'https://horriblesubs.info'
         self.req = requests.get(self.schedulelink)
         self.tree = html.fromstring(self.req.text)
         self.id = 0
@@ -33,7 +34,8 @@ class ScheduleGenerator:
             for item in table:
                 title = item.getchildren()[0].getchildren()[0].text
                 time = item.getchildren()[1].text
-                yield self.show(day, title, time)
+                link = f'{self.baselink}{item.getchildren()[0].getchildren()[0].attrib["href"]}'
+                yield self.show(day, title, time, link)
 
     def update_schedule(self):
         self.req = requests.get(self.schedulelink)
