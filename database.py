@@ -41,7 +41,7 @@ def insert_user(userid: int, username: str, firstname: str):
 
 
 @db_session
-def insert_show(title: str, airday: str, airtime: str, link:str):
+def insert_show(title: str, airday: str, airtime: str, link: str):
     """
     Inserts a show into the database
     :param title:

@@ -129,7 +129,7 @@ def calc_time(bot_inst):
     day = datetime.now().weekday()
     notif_offset = 300
     calc_offset = 5
-    # day = 0 # debug
+    # day = 3 # debug
     for show in sc.iter_schedule(sc.days[day]):
         pst = datetime.now(timezone('US/Pacific'))  # what's a daylight savings? (March = oof)
         pst_n = strptime(pst.strftime('%H:%M'), '%H:%M')  # current time
@@ -152,6 +152,13 @@ def calc_time(bot_inst):
             notif_timer.start()
             calc_timer.start()
             return
+
+        else:
+            pass
+
+    print('No more shows airing today, checking again in 5 minutes...\n')
+    calc_timer = Timer(notif_offset, calc_time, [bot_inst])
+    calc_timer.start()
 
 
 def send_notif(bot, show_title):
