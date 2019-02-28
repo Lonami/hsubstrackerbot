@@ -128,8 +128,7 @@ def calc_time(bot_inst):
     print('calc_time entered...\n')
     day = datetime.now().weekday()
     notif_offset = 300
-    calc_offset = 5
-    # day = 3 # debug
+    # day = 5 # debug
     for show in sc.iter_schedule(sc.days[day]):
         pst = datetime.now(timezone('US/Pacific'))  # what's a daylight savings? (March = oof)
         pst_n = strptime(pst.strftime('%H:%M'), '%H:%M')  # current time
@@ -139,25 +138,22 @@ def calc_time(bot_inst):
         pst_td = timedelta(hours=pst_n.tm_hour, minutes=pst_n.tm_min)
 
         final_td = int((s_td - pst_td).total_seconds())
-        # final_td = 10  # debug
-
-        if final_td > 0:
-            print(f'{show.title}, upcoming in {final_td} seconds.')
-            notif_timer = Timer(final_td + notif_offset, send_notif, [bot_inst, show.title])
-            # calc_time timer should ideally start a few seconds after the notif_timer
-            # don't forget the ~5 minute show delay, to allow the episode to be uploaded
-            # add the episode upload delay in the notif_send, we want time calculation to still be accurate
-            # This needs testing
-            calc_timer = Timer((final_td + calc_offset), calc_time, [bot_inst])
-            notif_timer.start()
-            calc_timer.start()
-            return
+        # final_td = -1  # debug
+        if final_td < 0:
+            print(f'{show.title} has already aired: {final_td} seconds.')
 
         else:
-            pass
+            print(f'{show.title}, upcoming in {final_td} seconds.')
+            notif_timer = Timer(final_td + notif_offset, send_notif, [bot_inst, show.title])
+            print(notif_timer)
+            notif_timer.start()
 
-    print('No more shows airing today, checking again in 5 minutes...\n')
-    calc_timer = Timer(notif_offset, calc_time, [bot_inst])
+    if final_td < 60:
+        print('final_td fell under 60 seconds, reverting...')
+        final_td = 60
+
+    print(f'No more shows airing today, checking again in {final_td} seconds...\n')
+    calc_timer = Timer(final_td, calc_time, [bot_inst])
     calc_timer.start()
 
 
