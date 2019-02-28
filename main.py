@@ -126,11 +126,12 @@ def calc_time(bot_inst):
     until we get a positive time delta (how much time is remaining until we have to do things)
     """
     print('calc_time entered...\n')
-    day = datetime.now().weekday()
+    tz = timezone('US/Pacific')
+    day = datetime.now(tz).weekday()
+    pst = datetime.now(tz)
     notif_offset = 300
     # day = 5 # debug
     for show in sc.iter_schedule(sc.days[day]):
-        pst = datetime.now(timezone('US/Pacific'))  # what's a daylight savings? (March = oof)
         pst_n = strptime(pst.strftime('%H:%M'), '%H:%M')  # current time
         showtime = strptime(show.time, '%H:%M')  # show - upcoming or past
 
@@ -159,6 +160,7 @@ def calc_time(bot_inst):
 
 def send_notif(bot, show_title):
     print('Send notif entered...\n')
+    print(f'Sending out notifications for {show_title}...')
     for user in return_users_subbed(get_show_id_by_name(show_title)):
         try:
             bot.sendMessage(chat_id=user, text=f'{show_title} has aired!')
