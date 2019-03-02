@@ -125,48 +125,54 @@ def calc_time(bot_inst):
     by subtracting the current time from the show release time (release_time - current_time)
     until we get a positive time delta (how much time is remaining until we have to do things)
     """
-    print('calc_time entered...\n')
+    logger.info('calc_time entered...\n')
     tz = timezone('US/Pacific')
     day = datetime.now(tz).weekday()
     pst = datetime.now(tz)
     notif_offset = 300
-    # day = 5 # debug
+
     for show in sc.iter_schedule(sc.days[day]):
         pst_n = strptime(pst.strftime('%H:%M'), '%H:%M')  # current time
         showtime = strptime(show.time, '%H:%M')  # show - upcoming or past
-
         s_td = timedelta(hours=showtime.tm_hour, minutes=showtime.tm_min)
         pst_td = timedelta(hours=pst_n.tm_hour, minutes=pst_n.tm_min)
-
         final_td = int((s_td - pst_td).total_seconds())
-        # final_td = -1  # debug
+
         if final_td < 0:
-            print(f'{show.title} has already aired: {final_td} seconds.')
+            logger.info(f'{show.title} has already aired: {final_td} seconds.')
 
         else:
-            print(f'{show.title}, upcoming in {final_td} seconds.')
+            logger.info(f'{show.title}, upcoming in {final_td} seconds.')
             notif_timer = Timer(final_td + notif_offset, send_notif, [bot_inst, show.title])
-            print(notif_timer)
+            logger.debug(notif_timer)
             notif_timer.start()
 
-    if final_td < 60:
-        print('final_td fell under 60 seconds, reverting...')
-        final_td = 60
+    # Here we grab the time delta between the last show of today and the first show of tomorrow
+    # so we can know how long we have to wait until calculating time again
 
-    print(f'No more shows airing today, checking again in {final_td} seconds...\n')
-    calc_timer = Timer(final_td, calc_time, [bot_inst])
-    calc_timer.start()
+    day_tomorrow = day + 1
+    ls_td = timedelta(days=day, hours=showtime.tm_hour, minutes=showtime.tm_min)
+
+    for t_show in sc.iter_schedule(sc.days[day_tomorrow]):
+        t_showtime = strptime(t_show.time, '%H:%M')
+        t_show_td = timedelta(days=day_tomorrow, hours=t_showtime.tm_hour, minutes=t_showtime.tm_min)
+        fut_td = int((t_show_td - ls_td).total_seconds())
+        logger.info(f'Last show today: {show.title}, first show tomorrow: {t_show.title}')
+        logger.info(f'Total amount of time to wait until tomorrow: {final_td + fut_td}')
+        calc_timer = Timer(final_td + fut_td, calc_time, [bot_inst])
+        calc_timer.start()
+        break
 
 
 def send_notif(bot, show_title):
-    print('Send notif entered...\n')
-    print(f'Sending out notifications for {show_title}...')
+    logger.info('Send notif entered...\n')
+    logger.info(f'Sending out notifications for {show_title}...')
     for user in return_users_subbed(get_show_id_by_name(show_title)):
         try:
             bot.sendMessage(chat_id=user, text=f'{show_title} has aired!')
         except Exception as e:
             logger.warning(f'send_notif failed with exception: {e}')
-            print(e)
+            pass
 
 
 def main():
