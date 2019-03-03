@@ -147,7 +147,16 @@ def delete_data():
         item.delete()
 
 
+@db_session
+def list_all_shows():
+    """
+    Returns a list of all shows currently in the database
+    :return:
+    """
+    return select(s.show_title for s in Show).order_by(lambda: s.show_id)[:]
+
+
 __all__ = ['insert_show', 'insert_user', 'check_user_exists', 'get_show_id_by_name', 'check_subscribed',
            'insert_subscription', 'remove_subscription', 'return_users_subbed', 'TransactionIntegrityError',
-           'delete_data', 'return_all_users']
+           'delete_data', 'return_all_users', 'list_all_shows']
 
