@@ -125,7 +125,9 @@ def calc_time(bot_inst):
     by subtracting the current time from the show release time (release_time - current_time)
     until we get a positive time delta (how much time is remaining until we have to do things)
     """
-    logger.info('calc_time entered...\n')
+    logger.info('calc_time entered...')
+    if not sc.update_schedule():
+        show_insert_loop(sc)
     tz = timezone('US/Pacific')
     day = datetime.now(tz).weekday()
     pst = datetime.now(tz)
@@ -152,6 +154,8 @@ def calc_time(bot_inst):
     # 6 = Sunday, 0 = Monday, fixed so it wraps around
     if day == 6:
         day = -1
+    if final_td < 0:
+        final_td = 0
     day_tomorrow = day + 1
     ls_td = timedelta(days=day, hours=showtime.tm_hour, minutes=showtime.tm_min)
 
@@ -167,7 +171,7 @@ def calc_time(bot_inst):
 
 
 def send_notif(bot, show_title):
-    logger.info('Send notif entered...\n')
+    logger.info('Send notif entered...')
     logger.info(f'Sending out notifications for {show_title}...')
     for user in return_users_subbed(get_show_id_by_name(show_title)):
         try:
