@@ -1,7 +1,11 @@
 from json import load
 from collections import namedtuple
 from lxml import html
+from database import list_all_shows, delete_data
 import requests
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class ScheduleGenerator:
@@ -41,12 +45,22 @@ class ScheduleGenerator:
         self.req = requests.get(self.schedulelink)
         self.tree = html.fromstring(self.req.text)
         self.id += 1
-        print(f"Update successful, id: {self.id}")
+        showlist = []
+        [showlist.append(show.title) for show in self.iter_schedule()]
+        if showlist == list_all_shows():
+            logger.info(f"Update successful, id: {self.id}")
+            return True
+        else:
+            logger.warning("Show mismatch found, flushing old data...")
+            delete_data()
+            return False
 
     def pretty_print(self):
         for day in self.days:
             print(day)
             for item in self.iter_schedule(day):
-                if item.day is day:
+                if item.day == day:
                     print(f'• {item.title} @ {item.time} PST')
             print('-----------------------------------------')
+
+
