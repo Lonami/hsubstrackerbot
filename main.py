@@ -149,7 +149,9 @@ def calc_time(bot_inst):
 
     # Here we grab the time delta between the last show of today and the first show of tomorrow
     # so we can know how long we have to wait until calculating time again
-
+    # 6 = Sunday, 0 = Monday, fixed so it wraps around
+    if day == 6:
+        day = -1
     day_tomorrow = day + 1
     ls_td = timedelta(days=day, hours=showtime.tm_hour, minutes=showtime.tm_min)
 
