@@ -77,6 +77,11 @@ def remove_subscription(userid: int, showid: int):
 
 
 @db_session
+def get_username_by_userid(userid: int):
+    return select(u.tgusername for u in User if u.tguser_id == userid)[:][0]
+
+
+@db_session
 def get_show_id_by_name(title: str):
     """
     Returns the show's auto-incremented internal id by its title
@@ -84,6 +89,16 @@ def get_show_id_by_name(title: str):
     :return:
     """
     return select(s.show_id for s in Show if s.show_title == title)[:][0]
+
+
+@db_session
+def get_show_link_by_name(title: str):
+    """
+    Returns the show's link by its title
+    :param title:
+    :return:
+    """
+    return select(s.show_link for s in Show if s.show_title == title)[:][0]
 
 
 @db_session
@@ -158,5 +173,4 @@ def list_all_shows():
 
 __all__ = ['insert_show', 'insert_user', 'check_user_exists', 'get_show_id_by_name', 'check_subscribed',
            'insert_subscription', 'remove_subscription', 'return_users_subbed', 'TransactionIntegrityError',
-           'delete_data', 'return_all_users', 'list_all_shows']
-
+           'delete_data', 'return_all_users', 'list_all_shows', 'get_show_link_by_name', 'get_username_by_userid']
