@@ -114,10 +114,7 @@ def check_subscribed(userid: int, showid: int):
     :param showid:
     :return:
     """
-    if len(select(sub for sub in Subscription if sub.ext_user_id == userid and sub.ext_show_id == showid)[:]) > 0:
-        return True
-    else:
-        return False
+    return len(select(sub for sub in Subscription if sub.ext_user_id == userid and sub.ext_show_id == showid)[:]) > 0
 
 
 @db_session
@@ -127,10 +124,7 @@ def check_user_exists(userid: int):
     :param userid:
     :return:
     """
-    if len(select(u for u in User if userid == u.tguser_id)[:]) > 0:
-        return True
-    else:
-        return False
+    return len(select(u for u in User if userid == u.tguser_id)[:]) > 0
 
 
 @db_session
