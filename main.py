@@ -4,14 +4,14 @@ from pytz import timezone
 from time import strptime
 from threading import Timer
 from json import load
-from telegram import InlineKeyboardMarkup, InlineKeyboardButton, Bot
+from telegram import InlineKeyboardMarkup, InlineKeyboardButton, Bot, parsemode
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler
 from hsubs import ScheduleGenerator
 from database import *
 
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                    level=logging.DEBUG)
+                    level=logging.INFO)
 
 logger = logging.getLogger(__name__)
 
@@ -175,7 +175,18 @@ def send_notif(bot, show_title):
     logger.info(f'Sending out notifications for {show_title}...')
     for user in return_users_subbed(get_show_id_by_name(show_title)):
         try:
-            bot.sendMessage(chat_id=user, text=f'{show_title} has aired!')
+            if sc.check_show_up(show_title):
+                info = sc.get_show_ep_magnet(show_title)
+                bot.sendMessage(chat_id=user,
+                                text=f'Hello, @{get_username_by_userid(user)}!\n'
+                                f'{show_title} - {info.episode} is out!\n'
+                                f'• 1080p: <a href="{sc.shorten_magnet(info.magnet1080)}">click</a>\n'
+                                f'• 720p:  <a href="{sc.shorten_magnet(info.magnet720)}">click</a>',
+                                parse_mode=parsemode.ParseMode.HTML, disable_web_page_preview=True)
+            else:
+                bot.sendMessage(chat_id=user, text=f"{show_title} was supposed to already be out but it isn't!\n"
+                                                   "It might've finished airing or there might be delays.\n"
+                                                   "For more info, please check the site!")
         except Exception as e:
             logger.warning(f'send_notif failed with exception: {e}')
             pass
