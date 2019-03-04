@@ -194,6 +194,7 @@ def send_notif(bot, show_title):
 
 def main():
     show_insert_loop(sc)
+    sc.check_show_up('')
     updater = Updater(config['token'])
     bot = Bot(config['token'])
     calc_time(bot)
