@@ -154,8 +154,7 @@ def calc_time(bot_inst):
     # 6 = Sunday, 0 = Monday, fixed so it wraps around
     if day == 6:
         day = -1
-    if final_td < 0:
-        final_td = 0
+
     day_tomorrow = day + 1
     ls_td = timedelta(days=day, hours=showtime.tm_hour, minutes=showtime.tm_min)
 
@@ -165,7 +164,7 @@ def calc_time(bot_inst):
         fut_td = int((t_show_td - ls_td).total_seconds())
         logger.info(f'Last show today: {show.title}, first show tomorrow: {t_show.title}')
         logger.info(f'Total amount of time to wait until tomorrow: {final_td + fut_td}')
-        calc_timer = Timer(final_td + fut_td, calc_time, [bot_inst])
+        calc_timer = Timer((final_td + fut_td) - 60, calc_time, [bot_inst])
         calc_timer.start()
         break
 
