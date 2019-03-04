@@ -78,6 +78,11 @@ def remove_subscription(userid: int, showid: int):
 
 @db_session
 def get_username_by_userid(userid: int):
+    """
+    Returns a user's username by his userid
+    :param userid:
+    :return:
+    """
     return select(u.tgusername for u in User if u.tguser_id == userid)[:][0]
 
 
