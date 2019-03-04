@@ -18,7 +18,6 @@ class ScheduleGenerator:
         self.config = load(open('config.json', 'r'))
         self.days = self.config['en_gb']['day_array']
         self.show = namedtuple('Show', ['day', 'title', 'time', 'link'])
-        self.info = namedtuple('ShowInfo', ['episode', 'magnet720', 'magnet1080'])
         self.schedulelink = 'https://horriblesubs.info/release-schedule/'
         self.baselink = 'https://horriblesubs.info'
         self.req = requests.get(self.schedulelink)
@@ -57,26 +56,6 @@ class ScheduleGenerator:
             delete_data()
             return False
 
-    def check_show_up(self, show_title=None):
-        session = HTMLSession()
-        r = session.get(self.baselink)
-        r.html.render()
-        if show_title.replace('–', '-') in r.html.html:
-            return True
-        else:
-            return False
-
-    def get_show_ep_magnet(self, show_title):
-        session = HTMLSession()
-        r = session.get(get_show_link_by_name(show_title))
-        r.html.render()
-        episode = r.html.find('a.rls-label')
-        magnets = r.html.find('span.dl-type.hs-magnet-link')
-        episode = episode[0].text.split(' ')[-2]
-        magnet720 = magnets[1].absolute_links.pop()
-        magnet1080 = magnets[2].absolute_links.pop()
-        return self.info(episode, magnet720, magnet1080)
-
     @staticmethod
     def shorten_magnet(magnet_link):
         r = requests.get(f'http://mgnet.me/api/create?m={magnet_link}')
@@ -89,3 +68,25 @@ class ScheduleGenerator:
                 if item.day == day:
                     print(f'• {item.title} @ {item.time} PST')
             print('-----------------------------------------')
+
+
+def check_show_up(show_title):
+    session = HTMLSession()
+    r = session.get('https://horriblesubs.info')
+    r.html.render()
+    if show_title.replace('–', '-') in r.html.html:
+        return True
+    else:
+        return False
+
+
+def get_show_ep_magnet(show_title):
+    session = HTMLSession()
+    r = session.get(get_show_link_by_name(show_title))
+    r.html.render()
+    episode = r.html.find('a.rls-label')
+    magnets = r.html.find('span.dl-type.hs-magnet-link')
+    episode = episode[0].text.split(' ')[-2]
+    magnet720 = magnets[1].absolute_links.pop()
+    magnet1080 = magnets[2].absolute_links.pop()
+    return episode, magnet720, magnet1080
