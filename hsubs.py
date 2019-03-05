@@ -46,8 +46,8 @@ class ScheduleGenerator:
         self.req = requests.get(self.schedulelink)
         self.tree = html.fromstring(self.req.text)
         self.id += 1
-        showlist = []
-        [showlist.append(show.title) for show in self.iter_schedule()]
+        showlist = [show.title for show in self.iter_schedule()]
+        
         if showlist == list_all_shows():
             logger.info(f"Update successful, id: {self.id}")
             return True
