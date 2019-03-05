@@ -41,23 +41,19 @@ def build_button_list(days=False, show=False, rtitle=None, gen_whichday=None, u_
     if days:
         return InlineKeyboardMarkup(([[InlineKeyboardButton(day, callback_data=day)] for day in sc.days]))
 
-    if show:
-        buttons = []
-        backbutton = [InlineKeyboardButton('⏪ Back', callback_data='back')]
-
-        for show in sc.iter_schedule(gen_whichday):
-            if rtitle == show.title or check_subscribed(userid=u_id, showid=get_show_id_by_name(show.title)):
-                buttons.append([InlineKeyboardButton(f'✅ {show.title}'
-                                                     f' @ {show.time} PST',
-                                                     callback_data=show.title)])
-            else:
-                buttons.append([InlineKeyboardButton(f'{show.title} @ {show.time} PST', callback_data=show.title)])
-
-        buttons.append(backbutton)
-        return InlineKeyboardMarkup(buttons)
-
-    else:
+    if not show:
         return None
+
+    buttons = []
+    for show in sc.iter_schedule(gen_whichday):
+        check = ''
+        if rtitle == show.title or check_subscribed(userid=u_id, showid=get_show_id_by_name(show.title)):
+            check = '✅ '
+
+        buttons.append([InlineKeyboardButton(f'{check}{show.title} @ {show.time} PST', callback_data=show.title)])
+
+    buttons.append([InlineKeyboardButton('⏪ Back', callback_data='back')])
+    return InlineKeyboardMarkup(buttons)
 
 
 def handle_button_press(bot, update):
