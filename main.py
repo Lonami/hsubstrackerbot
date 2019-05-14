@@ -122,6 +122,9 @@ def schedule_notifs_today(bot, last_show_title=None):
 
         total_time_td = int((showtime_td - tz_now_td).total_seconds())
 
+        if show.title == list(sc.iter_schedule(sc.days[today]))[~0].title:
+            schedule_tomorrow(bot, today, show, total_time_td)
+
         if total_time_td > 0:
             logger.info(f"{show.title} in {total_time_td} seconds.")
             Timer(total_time_td + notif_offset, send_notif, [bot, show]).start()
@@ -134,8 +137,7 @@ def schedule_notifs_today(bot, last_show_title=None):
             logger.info(f"{show.title} has already aired: {total_time_td} seconds.")
             continue
 
-        if show.title == list(sc.iter_schedule(sc.days[today]))[~0].title:
-            schedule_tomorrow(bot, today, show, total_time_td)
+
 
         break
 
