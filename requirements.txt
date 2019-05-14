@@ -1,6 +1,6 @@
-pony
-requests
-requests-html
+beautifulsoup4
 lxml
-python-telegram-bot
+pony
 pytz
+requests
+python-telegram-bot

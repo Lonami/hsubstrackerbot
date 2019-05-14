@@ -1,5 +1,4 @@
 import logging
-from multiprocessing import Pool
 from datetime import datetime, timedelta
 from pytz import timezone
 from time import strptime
@@ -7,7 +6,7 @@ from threading import Timer
 from json import load
 from telegram import InlineKeyboardMarkup, InlineKeyboardButton, Bot, parsemode
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler
-from hsubs import ScheduleGenerator, check_show_up, get_show_ep_magnet
+from hsubs import ScheduleGenerator, show_insert_loop
 from database import *
 
 
@@ -19,18 +18,6 @@ logger = logging.getLogger(__name__)
 sc = ScheduleGenerator()
 
 config = load(open('config.json', 'r'))
-
-
-def show_insert_loop(schedule: ScheduleGenerator):
-    """
-    Grabs all the shows from the schedule and inserts them
-    into the database
-    """
-    for show in schedule.iter_schedule():
-        try:
-            insert_show(show.title, show.day, show.time, show.link)
-        except TransactionIntegrityError:
-            pass
 
 
 def build_button_list(days=False, show=False, rtitle=None, gen_whichday=None, u_id=None):
@@ -61,7 +48,7 @@ def handle_button_press(bot, update):
     Handles any button presses via in-place
     message editing
     """
-    callback_query = update.callback_query.data.split('@')[0]
+    callback_query = update.callback_query.data
     cbq_id = update.callback_query.id
     msg_id = update.callback_query.message.message_id
     cht_id = update.callback_query.message.chat.id
@@ -116,86 +103,85 @@ def start_command(bot, update):
         bot.sendMessage(chat_id=update.message.chat_id, text=config['en_gb']['pm_only'])
 
 
-def calc_time(bot_inst):
-    """
-    Calculates how much time there is until the next show release
-    by subtracting the current time from the show release time (release_time - current_time)
-    until we get a positive time delta (how much time is remaining until we have to do things)
-    """
-    logger.info('calc_time entered...')
+def schedule_notifs_today(bot):
+    logger.info('schedule_notifs_today entered...')
     if not sc.update_schedule():
         show_insert_loop(sc)
+
     tz = timezone('US/Pacific')
-    day = datetime.now(tz).weekday()
-    pst = datetime.now(tz)
+    today = datetime.now(tz).weekday()
+    time_tz = datetime.now(tz)
     notif_offset = 300
 
-    for show in sc.iter_schedule(sc.days[day]):
-        pst_n = strptime(pst.strftime('%H:%M'), '%H:%M')  # current time
-        showtime = strptime(show.time, '%H:%M')  # show - upcoming or past
-        s_td = timedelta(hours=showtime.tm_hour, minutes=showtime.tm_min)
-        pst_td = timedelta(hours=pst_n.tm_hour, minutes=pst_n.tm_min)
-        final_td = int((s_td - pst_td).total_seconds())
+    for show in sc.iter_schedule(sc.days[today]):
+        time_tz_now = strptime(time_tz.strftime('%H:%M'), '%H:%M')
+        showtime = strptime(show.time, '%H:%M')
 
-        if final_td < 0:
-            logger.info(f'{show.title} has already aired: {final_td} seconds.')
+        tz_now_td = timedelta(hours=time_tz_now.tm_hour, minutes=time_tz_now.tm_min)
+        showtime_td = timedelta(hours=showtime.tm_hour, minutes=showtime.tm_min)
+
+        total_time_td = int((showtime_td - tz_now_td).total_seconds())
+
+        if total_time_td > 0:
+            logger.info(f"{show.title} in {total_time_td} seconds.")
+            Timer(total_time_td + notif_offset, send_notif, [bot, show]).start()
+
+        elif total_time_td in range(-notif_offset, 1):
+            logger.info(f"{show.title} was in the offset range, ({total_time_td}) scheduling immediately...")
+            send_notif(bot, show)
 
         else:
-            logger.info(f'{show.title}, upcoming in {final_td} seconds.')
-            notif_timer = Timer(final_td + notif_offset, send_notif, [bot_inst, show.title])
-            logger.debug(notif_timer)
-            notif_timer.start()
+            logger.info(f"{show.title} has already aired and is outside offset range: {total_time_td}")
+            continue
 
-    # Here we grab the time delta between the last show of today and the first show of tomorrow
-    # so we can know how long we have to wait until calculating time again
-    # 6 = Sunday, 0 = Monday, fixed so it wraps around
-    if day == 6:
-        day = -1
+        if show.title == list(sc.iter_schedule(sc.days[today]))[~0].title:
+            schedule_tomorrow(bot, today, show, total_time_td)
 
-    day_tomorrow = day + 1
-    ls_td = timedelta(days=day, hours=showtime.tm_hour, minutes=showtime.tm_min)
-
-    for t_show in sc.iter_schedule(sc.days[day_tomorrow]):
-        t_showtime = strptime(t_show.time, '%H:%M')
-        t_show_td = timedelta(days=day_tomorrow, hours=t_showtime.tm_hour, minutes=t_showtime.tm_min)
-        fut_td = int((t_show_td - ls_td).total_seconds())
-        logger.info(f'Last show today: {show.title}, first show tomorrow: {t_show.title}')
-        logger.info(f'Total amount of time to wait until tomorrow: {final_td + fut_td}')
-        calc_timer = Timer((final_td + fut_td) - 60, calc_time, [bot_inst])
-        calc_timer.start()
         break
 
 
-def send_notif(bot, show_title):
-    logger.info('Send notif entered...')
-    logger.info(f'Sending out notifications for {show_title}...')
-    for user in return_users_subbed(get_show_id_by_name(show_title)):
-        try:
-            with Pool(processes=2) as pool:
-                show_up_res = pool.apply_async(check_show_up, (show_title,)).get(timeout=30)
-                logger.info(f'{show_title} - result from check_show_up: {show_up_res}')
-                if show_up_res:
-                    info = pool.apply_async(get_show_ep_magnet, (show_title,)).get(timeout=30)
-                    bot.sendMessage(chat_id=user,
-                                    text=f'Hello, @{get_username_by_userid(user)}!\n'
-                                    f'{show_title} - {info[0]} is out!\n'
-                                    f'• 720p: <a href="{sc.shorten_magnet(info[1])}">click</a>\n'
-                                    f'• 1080p:  <a href="{sc.shorten_magnet(info[2])}">click</a>',
-                                    parse_mode=parsemode.ParseMode.HTML, disable_web_page_preview=True)
-                else:
-                    bot.sendMessage(chat_id=user, text=f"{show_title} was supposed to already be out but it isn't!\n"
-                                                       "It might've finished airing or there might be delays.\n"
-                                                       "For more info, please check the site!")
-        except Exception as e:
-            logger.warning(f'send_notif failed with exception: {e}')
-            pass
+def schedule_tomorrow(bot, day, last_show, total_time_prev):
+    logger.info("schedule_tomorrow entered...")
+    tomorrow = (day + 1) % 7
+    last_show_time = strptime(last_show.time, '%H:%M')
+    last_show_td = timedelta(days=day, hours=last_show_time.tm_hour, minutes=last_show_time.tm_min)
+
+    for first_show in sc.iter_schedule(sc.days[tomorrow]):
+        first_show_time = strptime(first_show.time, '%H:%M')
+        first_show_td = timedelta(days=tomorrow, hours=first_show_time.tm_hour, minutes=first_show_time.tm_min)
+        schedule_notifs_in = int((first_show_td - last_show_td).total_seconds())
+        Timer(total_time_prev + schedule_notifs_in, schedule_notifs_today, [bot]).start()
+        logger.info(f"Last show today: {last_show.title}, first show tomorrow: {first_show.title}. Time"
+                    f" before rescheduling for tomorrow: {total_time_prev + schedule_notifs_in}")
+        break
+
+
+def send_notif(bot, show):
+    logger.info("send_notif entered...")
+    logger.info(f"Sending out notifications for {show.title}")
+    show_check = sc.check_show_up(show.link)
+
+    if show_check.released:
+        for user in return_users_subbed(get_show_id_by_name(show.title)):
+            try:
+                bot.sendMessage(chat_id=user, text=f"Hello @{get_username_by_userid(user)}!\n"
+                                f"{show_check.title} episode {show_check.episode} has released!\n"
+                                f"Links:\n"
+                                f"• 480p: {sc.shorten_magnet(show_check.magnet480)}\n"
+                                f"• 720p: {sc.shorten_magnet(show_check.magnet720)}\n"
+                                f"• 1080p: {sc.shorten_magnet(show_check.magnet1080)}\n")
+                schedule_notifs_today(bot)
+
+            except Exception as e:
+                logger.warning(f"An exception occured during send_notif: {str(e)}")
+    # TODO: Write this again
 
 
 def main():
     show_insert_loop(sc)
     updater = Updater(config['token'])
     bot = Bot(config['token'])
-    calc_time(bot)
+    schedule_notifs_today(bot)
 
     dp = updater.dispatcher
     dp.add_handler(CommandHandler("start", start_command))

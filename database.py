@@ -1,4 +1,5 @@
-from pony.orm import db_session, set_sql_debug, Database, PrimaryKey, Required, select, TransactionIntegrityError
+from pony.orm import db_session, set_sql_debug, Database, PrimaryKey, Required, Optional, select,\
+    TransactionIntegrityError
 
 set_sql_debug(False)
 db = Database()
@@ -16,6 +17,7 @@ class Show(db.Entity):
     show_airing_day = Required(str)
     show_airing_time = Required(str)
     show_link = Required(str)
+    show_internal_id = Optional(int)
 
 
 class Subscription(db.Entity):
@@ -170,6 +172,28 @@ def list_all_shows():
     return select(s.show_title for s in Show).order_by(lambda: s.show_id)[:]
 
 
+@db_session
+def get_internal_show_id(title: str):
+    """
+    Returns the show's HS API internal ID
+    :param title:
+    :return:
+    """
+    return Show.get(show_title=title).show_internal_id
+
+
+@db_session
+def set_internal_show_id(title: str, idvalue: int):
+    """
+    Sets a show's HS API internal ID
+    :param title:
+    :param idvalue:
+    :return:
+    """
+    Show.get(show_title=title).show_internal_id = idvalue
+
+
 __all__ = ['insert_show', 'insert_user', 'check_user_exists', 'get_show_id_by_name', 'check_subscribed',
            'insert_subscription', 'remove_subscription', 'return_users_subbed', 'TransactionIntegrityError',
-           'delete_data', 'return_all_users', 'list_all_shows', 'get_show_link_by_name', 'get_username_by_userid']
+           'delete_data', 'return_all_users', 'list_all_shows', 'get_show_link_by_name', 'get_username_by_userid',
+           'get_internal_show_id', 'set_internal_show_id']

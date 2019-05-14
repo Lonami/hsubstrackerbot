@@ -1,8 +1,8 @@
 from json import load
 from collections import namedtuple
-from lxml import html
-from requests_html import HTMLSession
-from database import list_all_shows, delete_data, get_show_link_by_name
+from database import *
+from bs4 import BeautifulSoup
+from re import sub, findall
 import requests
 import logging
 
@@ -20,31 +20,62 @@ class ScheduleGenerator:
         self.show = namedtuple('Show', ['day', 'title', 'time', 'link'])
         self.schedulelink = 'https://horriblesubs.info/release-schedule/'
         self.baselink = 'https://horriblesubs.info'
-        self.req = requests.get(self.schedulelink)
-        self.tree = html.fromstring(self.req.text)
+        self.req = requests.get(self.schedulelink).text
+        self.soup = BeautifulSoup(self.req, 'lxml')
         self.id = 0
 
     def iter_schedule(self, days=None):
-        if not days:
-            days = self.days
-        elif not isinstance(days, (list, tuple)):
-            days = [days]
+        for titleElem, timeElem in zip(self.soup.find_all(attrs={'title': 'See all releases for this show'}),
+                                       self.soup.find_all(attrs={'schedule-time'})):
 
-        for day in days:
-            # tables start from 1 rather than from 0, 1 day = 1 table
-            dayindex = self.days.index(day) + 1
-            expr_str = f'//*[@id="post-63"]/div/table[{dayindex}]'
-            table = self.tree.xpath(expr_str)[0].getchildren()
+            day = sub(r" \((.*?)\)", "", titleElem.find_previous(attrs={'weekday'}).contents[0])
+            titlecheck = titleElem.find(attrs={'data-cfemail': True})
+            title = titleElem.contents[0]
+            time = timeElem.contents[0]
+            link = self.baselink + titleElem.get('href')
 
-            for item in table:
-                title = item.getchildren()[0].getchildren()[0].text
-                time = item.getchildren()[1].text
-                link = f'{self.baselink}{item.getchildren()[0].getchildren()[0].attrib["href"]}'
+            if titlecheck is not None:
+                title = sub(r"\[(.*?)\]", self.decode(titlecheck.get("data-cfemail")), titleElem.getText())
+
+            if days is None:
                 yield self.show(day, title, time, link)
 
+            elif days in day:
+                yield self.show(day, title, time, link)
+
+            else:
+                pass
+
+    @staticmethod
+    def check_show_internal_id(link):
+        for element in BeautifulSoup(requests.get(link).text, 'lxml').find_all(attrs={'type': 'text/javascript'}):
+            if 'hs_showid' in element.getText():
+                return findall(r"\d+", element.getText())[0]
+
+    @staticmethod
+    def check_show_up(link):
+        show_id = ScheduleGenerator.check_show_internal_id(link)
+        url = f'https://horriblesubs.info//api.php?method=getshows&type=show&showid={show_id}'
+        soup = BeautifulSoup(requests.get(url).text, 'lxml')
+        showinfo = soup.find(attrs={'rls-info-container'}).contents[0]
+        magnetfind_args = 'a', {'title': 'Magnet Link'}
+        ret_si = namedtuple('ShowInfo', ['released', 'title', 'episode', 'magnet480', 'magnet720', 'magnet1080'])
+
+        if showinfo.span.text == "Today":
+            magnet480 = soup.find(*magnetfind_args)
+            magnet720 = magnet480.find_next(*magnetfind_args)
+            magnet1080 = magnet720.find_next(*magnetfind_args)
+
+            return ret_si(True, showinfo.span.next_sibling.strip(), showinfo.strong.text,
+                          magnet480.get('href'), magnet720.get('href'), magnet1080.get('href'))
+
+        else:
+            return ret_si(False, showinfo.span.next_sibling.strip(), showinfo.strong.text,
+                          None, None, None)
+
     def update_schedule(self):
+        # TODO : Rewrite update function to use partial differences instead of deleting everything
         self.req = requests.get(self.schedulelink)
-        self.tree = html.fromstring(self.req.text)
         self.id += 1
         showlist = [show.title for show in self.iter_schedule()]
         
@@ -54,6 +85,7 @@ class ScheduleGenerator:
         else:
             logger.warning("Show mismatch found, flushing old data...")
             delete_data()
+            show_insert_loop(self)
             return False
 
     @staticmethod
@@ -61,32 +93,22 @@ class ScheduleGenerator:
         r = requests.get(f'http://mgnet.me/api/create?m={magnet_link}')
         return r.json().get('shorturl')
 
-    def pretty_print(self):
-        for day in self.days:
-            print(day)
-            for item in self.iter_schedule(day):
-                if item.day == day:
-                    print(f'• {item.title} @ {item.time} PST')
-            print('-----------------------------------------')
+    @staticmethod
+    def decode(encstr):
+        return ''.join([chr(int(encstr[i:i + 2], 16) ^ int(encstr[:2], 16)) for i in range(2, len(encstr), 2)])
 
 
-def check_show_up(show_title):
-    session = HTMLSession()
-    r = session.get('https://horriblesubs.info')
-    r.html.render()
-    if show_title.replace('–', '-') in r.html.html:
-        return True
-    else:
-        return False
+def show_insert_loop(schedule: ScheduleGenerator):
+        """
+        Grabs all the shows from the schedule and inserts them
+        into the database
+        """
+        logger.info('Entering show_insert_loop...')
+        for show in schedule.iter_schedule():
+            try:
+                insert_show(show.title, show.day, show.time, show.link)
+                if not get_internal_show_id(show.title):
+                    set_internal_show_id(show.title, schedule.check_show_internal_id(show.link))
 
-
-def get_show_ep_magnet(show_title):
-    session = HTMLSession()
-    r = session.get(get_show_link_by_name(show_title))
-    r.html.render()
-    episode = r.html.find('a.rls-label')
-    magnets = r.html.find('span.dl-type.hs-magnet-link')
-    episode = episode[0].text.split(' ')[-2]
-    magnet720 = magnets[1].absolute_links.pop()
-    magnet1080 = magnets[2].absolute_links.pop()
-    return episode, magnet720, magnet1080
+            except TransactionIntegrityError:
+                pass
