@@ -103,7 +103,7 @@ def start_command(bot, update):
         bot.sendMessage(chat_id=update.message.chat_id, text=config['en_gb']['pm_only'])
 
 
-def schedule_notifs_today(bot):
+def schedule_notifs_today(bot, last_show_title=None):
     logger.info('schedule_notifs_today entered...')
     if not sc.update_schedule():
         show_insert_loop(sc)
@@ -126,12 +126,12 @@ def schedule_notifs_today(bot):
             logger.info(f"{show.title} in {total_time_td} seconds.")
             Timer(total_time_td + notif_offset, send_notif, [bot, show]).start()
 
-        elif total_time_td in range(-notif_offset, 1):
+        elif total_time_td in range(-notif_offset, 1) and show.title != last_show_title:
             logger.info(f"{show.title} was in the offset range, ({total_time_td}) scheduling immediately...")
             send_notif(bot, show)
 
         else:
-            logger.info(f"{show.title} has already aired and is outside offset range: {total_time_td}")
+            logger.info(f"{show.title} has already aired: {total_time_td} seconds.")
             continue
 
         if show.title == list(sc.iter_schedule(sc.days[today]))[~0].title:
@@ -169,11 +169,14 @@ def send_notif(bot, show):
                                 f"Links:\n"
                                 f"• 480p: {sc.shorten_magnet(show_check.magnet480)}\n"
                                 f"• 720p: {sc.shorten_magnet(show_check.magnet720)}\n"
-                                f"• 1080p: {sc.shorten_magnet(show_check.magnet1080)}\n")
-                schedule_notifs_today(bot)
+                                f"• 1080p: {sc.shorten_magnet(show_check.magnet1080)}\n",
+                                disable_web_page_preview=True)
+                schedule_notifs_today(bot, show.title)
 
             except Exception as e:
                 logger.warning(f"An exception occured during send_notif: {str(e)}")
+    else:
+        logger.warning(f"{show_check.title} was supposed to be out but isn't!")
     # TODO: Write this again
 
 
