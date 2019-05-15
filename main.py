@@ -177,9 +177,10 @@ def send_notif(bot, show):
 
             except Exception as e:
                 logger.warning(f"An exception occured during send_notif: {str(e)}")
+                schedule_notifs_today(bot, show.title)
     else:
         logger.warning(f"{show_check.title} was supposed to be out but isn't!")
-    # TODO: Write this again
+        schedule_notifs_today(bot, show.title)
 
 
 def main():
