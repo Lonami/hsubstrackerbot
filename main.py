@@ -137,8 +137,6 @@ def schedule_notifs_today(bot, last_show_title=None):
             logger.info(f"{show.title} has already aired: {total_time_td} seconds.")
             continue
 
-
-
         break
 
 
@@ -150,7 +148,7 @@ def schedule_tomorrow(bot, day, last_show, total_time_prev):
 
     for first_show in sc.iter_schedule(sc.days[tomorrow]):
         first_show_time = strptime(first_show.time, '%H:%M')
-        first_show_td = timedelta(days=tomorrow, hours=first_show_time.tm_hour, minutes=first_show_time.tm_min)
+        first_show_td = timedelta(days=day + 1, hours=first_show_time.tm_hour, minutes=first_show_time.tm_min)
         schedule_notifs_in = int((first_show_td - last_show_td).total_seconds())
         Timer(total_time_prev + schedule_notifs_in, schedule_notifs_today, [bot]).start()
         logger.info(f"Last show today: {last_show.title}, first show tomorrow: {first_show.title}. Time"
@@ -180,6 +178,10 @@ def send_notif(bot, show):
                 schedule_notifs_today(bot, show.title)
     else:
         logger.warning(f"{show_check.title} was supposed to be out but isn't!")
+        for user in return_users_subbed(get_show_id_by_name(show.title)):
+            bot.sendMessage(chat_id=user, text=f"{show.title} was supposed to be out but isn't!"
+                            f"Please check the site for further information!")
+
         schedule_notifs_today(bot, show.title)
 
 
