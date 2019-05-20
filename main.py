@@ -2,10 +2,9 @@ import logging
 from datetime import datetime, timedelta
 from pytz import timezone
 from time import strptime
-from threading import Timer
 from json import load
-from telegram import InlineKeyboardMarkup, InlineKeyboardButton, Bot, parsemode
-from telegram.ext import Updater, CommandHandler, CallbackQueryHandler
+from telethon import TelegramClient, events
+from telethon.tl.custom import Button
 from hsubs import ScheduleGenerator, show_insert_loop
 from database import *
 
@@ -26,7 +25,7 @@ def build_button_list(days=False, show=False, rtitle=None, gen_whichday=None, u_
     given state
     """
     if days:
-        return InlineKeyboardMarkup(([[InlineKeyboardButton(day, callback_data=day)] for day in sc.days]))
+        return [[Button.inline(day)] for day in sc.days]
 
     if not show:
         return None
@@ -37,70 +36,55 @@ def build_button_list(days=False, show=False, rtitle=None, gen_whichday=None, u_
         if rtitle == show.title or check_subscribed(userid=u_id, showid=get_show_id_by_name(show.title)):
             check = '✅ '
 
-        buttons.append([InlineKeyboardButton(f'{check}{show.title} @ {show.time} PST', callback_data=show.title)])
+        buttons.append([Button.inline(f'{check}{show.title} @ {show.time} PST', show.title)])
 
-    buttons.append([InlineKeyboardButton('⏪ Back', callback_data='back')])
-    return InlineKeyboardMarkup(buttons)
+    buttons.append([Button.inline('⏪ Back', 'back')])
+    return buttons
 
 
-def handle_button_press(bot, update):
+@events.register(events.CallbackQuery)
+async def handle_button_press(event: events.CallbackQuery.Event):
     """
     Handles any button presses via in-place
     message editing
     """
-    callback_query = update.callback_query.data
-    cbq_id = update.callback_query.id
-    msg_id = update.callback_query.message.message_id
-    cht_id = update.callback_query.message.chat.id
+    data = event.data.decode()
 
-    if callback_query in sc.days:
-        bot.editMessageText(text=f'{config["en_gb"]["shows_day"]} {callback_query} :',
-                            chat_id=cht_id, message_id=msg_id)
-        bot.editMessageReplyMarkup(chat_id=cht_id, message_id=msg_id,
-                                   reply_markup=build_button_list(show=True, gen_whichday=callback_query, u_id=cht_id))
-        bot.answerCallbackQuery(callback_query_id=cbq_id)
+    if data in sc.days:
+        await event.edit(f'{config["en_gb"]["shows_day"]} {data} :',
+                         buttons=build_button_list(show=True, gen_whichday=data, u_id=event.chat_id))
 
-    elif 'back' in callback_query:
-        bot.editMessageText(text=config['en_gb']['pick_day'],
-                            chat_id=cht_id, message_id=msg_id)
-        bot.editMessageReplyMarkup(chat_id=cht_id, message_id=msg_id, reply_markup=build_button_list(days=True))
-        bot.answerCallbackQuery(callback_query_id=cbq_id)
+    elif 'back' in data:
+        await event.edit(config['en_gb']['pick_day'],
+                         buttons=build_button_list(days=True))
+
+    elif check_subscribed(event.chat_id, get_show_id_by_name(data)):
+        message = await event.get_message()
+        day_context = message.raw_text.split(' ')[5]  # what a hack
+        remove_subscription(event.chat_id, get_show_id_by_name(data))
+        await event.edit(buttons=build_button_list(show=True, gen_whichday=day_context, u_id=event.chat_id))
 
     else:
-        if check_subscribed(cht_id, get_show_id_by_name(callback_query)):
-            day_context = update.callback_query.message.text.split(' ')[5]  # what a hack
-            remove_subscription(cht_id, get_show_id_by_name(callback_query))
-            bot.editMessageReplyMarkup(chat_id=cht_id, message_id=msg_id,
-                                       reply_markup=build_button_list(show=True, gen_whichday=day_context,
-                                                                      u_id=cht_id))
-            bot.answerCallbackQuery(callback_query_id=cbq_id)
-
-        else:
-            day_context = update.callback_query.message.text.split(' ')[5]
-            insert_subscription(cht_id, get_show_id_by_name(callback_query))
-            bot.editMessageReplyMarkup(chat_id=cht_id, message_id=msg_id,
-                                       reply_markup=build_button_list(show=True, gen_whichday=day_context,
-                                                                      rtitle=callback_query, u_id=cht_id))
-            bot.answerCallbackQuery(callback_query_id=cbq_id)
+        message = await event.get_message()
+        day_context = message.raw_text.split(' ')[5]  # what a heck
+        insert_subscription(event.chat_id, get_show_id_by_name(data))
+        await event.edit(buttons=build_button_list(show=True, gen_whichday=day_context, rtitle=data, u_id=event.chat_id))
 
 
-def start_command(bot, update):
-    if update.message.chat.type == 'private':
-        userid = update.message.chat_id
-        username = update.message.from_user.username
-        firstname = update.message.from_user.first_name
+@events.register(events.NewMessage(pattern='/start'))
+async def start_command(event):
+    if not event.is_private:
+        await event.respond(config['en_gb']['pm_only'])
+        return
 
-        if check_user_exists(userid):
-            bot.sendMessage(chat_id=userid, text=config['en_gb']['greet_seen'],
-                            reply_markup=build_button_list(days=True))
-
-        else:
-            bot.sendMessage(chat_id=userid, text=config['en_gb']['greet_notseen'],
-                            reply_markup=build_button_list(days=True))
-            insert_user(userid, username, firstname)
-
+    user = await event.get_sender()
+    if check_user_exists(user.id):
+        await event.respond(config['en_gb']['greet_seen'],
+                            buttons=build_button_list(days=True))
     else:
-        bot.sendMessage(chat_id=update.message.chat_id, text=config['en_gb']['pm_only'])
+        insert_user(user.id, user.username, user.first_name)
+        await event.respond(config['en_gb']['greet_notseen'],
+                            buttons=build_button_list(days=True))
 
 
 def schedule_notifs_today(bot, last_show_title=None):
@@ -127,11 +111,11 @@ def schedule_notifs_today(bot, last_show_title=None):
 
         if total_time_td > 0:
             logger.info(f"{show.title} in {total_time_td} seconds.")
-            Timer(total_time_td + notif_offset, send_notif, [bot, show]).start()
+            bot.loop.call_later(total_time_td + notif_offset, send_notif, bot, show)
 
         elif total_time_td in range(-notif_offset, 1) and show.title != last_show_title:
             logger.info(f"{show.title} was in the offset range, ({total_time_td}) scheduling immediately...")
-            send_notif(bot, show)
+            bot.loop.call_soon(send_notif, bot, show)
 
         else:
             logger.info(f"{show.title} has already aired: {total_time_td} seconds.")
@@ -150,13 +134,17 @@ def schedule_tomorrow(bot, day, last_show, total_time_prev):
         first_show_time = strptime(first_show.time, '%H:%M')
         first_show_td = timedelta(days=day + 1, hours=first_show_time.tm_hour, minutes=first_show_time.tm_min)
         schedule_notifs_in = int((first_show_td - last_show_td).total_seconds())
-        Timer(total_time_prev + schedule_notifs_in, schedule_notifs_today, [bot]).start()
+        bot.loop.call_later(total_time_prev + schedule_notifs_in, schedule_notifs_today, bot)
         logger.info(f"Last show today: {last_show.title}, first show tomorrow: {first_show.title}. Time"
                     f" before rescheduling for tomorrow: {total_time_prev + schedule_notifs_in}")
         break
 
 
 def send_notif(bot, show):
+    bot.loop.create_task(do_send_notif(bot, show))
+
+
+async def do_send_notif(bot, show):
     logger.info("send_notif entered...")
     logger.info(f"Sending out notifications for {show.title}")
     show_check = sc.check_show_up(show.link)
@@ -166,13 +154,16 @@ def send_notif(bot, show):
         if subbed_userlist:
             for user in subbed_userlist:
                 try:
-                    bot.sendMessage(chat_id=user, text=f"Hello @{get_username_by_userid(user)}!\n"
-                                    f"{show_check.title} episode {show_check.episode} has released!\n"
-                                    f"Links:\n"
-                                    f"• 480p: {sc.shorten_magnet(show_check.magnet480)}\n"
-                                    f"• 720p: {sc.shorten_magnet(show_check.magnet720)}\n"
-                                    f"• 1080p: {sc.shorten_magnet(show_check.magnet1080)}\n",
-                                    disable_web_page_preview=True)
+                    await bot.send_message(
+                        user,
+                        f"Hello @{get_username_by_userid(user)}!\n"
+                        f"{show_check.title} episode {show_check.episode} has released!\n"
+                        f"Links:\n"
+                        f"• 480p: {sc.shorten_magnet(show_check.magnet480)}\n"
+                        f"• 720p: {sc.shorten_magnet(show_check.magnet720)}\n"
+                        f"• 1080p: {sc.shorten_magnet(show_check.magnet1080)}\n",
+                        link_preview=False
+                    )
                     schedule_notifs_today(bot, show.title)
 
                 except Exception as e:
@@ -186,24 +177,24 @@ def send_notif(bot, show):
         subbed_userlist = return_users_subbed(get_show_id_by_name(show.title))
         if subbed_userlist:
             for user in subbed_userlist:
-                bot.sendMessage(chat_id=user, text=f"{show.title} was supposed to be out but isn't!"
-                                f"Please check the site for further information!")
+                await bot.send_message(
+                    user,
+                    f"{show.title} was supposed to be out but isn't!"
+                    f"Please check the site for further information!"
+                )
 
         schedule_notifs_today(bot, show.title)
 
 
 def main():
     show_insert_loop(sc)
-    updater = Updater(config['token'])
-    bot = Bot(config['token'])
+    bot = TelegramClient('bot', 6, 'eb06d4abfb49dc3eeb1aeb98ae0f581e').start(bot_token=config['token'])
     schedule_notifs_today(bot)
 
-    dp = updater.dispatcher
-    dp.add_handler(CommandHandler("start", start_command))
-    dp.add_handler(CallbackQueryHandler(handle_button_press))
+    bot.add_event_handler(start_command)
+    bot.add_event_handler(handle_button_press)
 
-    updater.start_polling()
-    updater.idle()
+    bot.run_until_disconnected()
 
 
 if __name__ == '__main__':

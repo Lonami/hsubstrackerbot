@@ -3,4 +3,4 @@ lxml
 pony
 pytz
 requests
-python-telegram-bot
+telethon
