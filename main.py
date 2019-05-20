@@ -162,25 +162,32 @@ def send_notif(bot, show):
     show_check = sc.check_show_up(show.link)
 
     if show_check.released:
-        for user in return_users_subbed(get_show_id_by_name(show.title)):
-            try:
-                bot.sendMessage(chat_id=user, text=f"Hello @{get_username_by_userid(user)}!\n"
-                                f"{show_check.title} episode {show_check.episode} has released!\n"
-                                f"Links:\n"
-                                f"• 480p: {sc.shorten_magnet(show_check.magnet480)}\n"
-                                f"• 720p: {sc.shorten_magnet(show_check.magnet720)}\n"
-                                f"• 1080p: {sc.shorten_magnet(show_check.magnet1080)}\n",
-                                disable_web_page_preview=True)
-                schedule_notifs_today(bot, show.title)
+        subbed_userlist = return_users_subbed(get_show_id_by_name(show.title))
+        if subbed_userlist:
+            for user in subbed_userlist:
+                try:
+                    bot.sendMessage(chat_id=user, text=f"Hello @{get_username_by_userid(user)}!\n"
+                                    f"{show_check.title} episode {show_check.episode} has released!\n"
+                                    f"Links:\n"
+                                    f"• 480p: {sc.shorten_magnet(show_check.magnet480)}\n"
+                                    f"• 720p: {sc.shorten_magnet(show_check.magnet720)}\n"
+                                    f"• 1080p: {sc.shorten_magnet(show_check.magnet1080)}\n",
+                                    disable_web_page_preview=True)
+                    schedule_notifs_today(bot, show.title)
 
-            except Exception as e:
-                logger.warning(f"An exception occured during send_notif: {str(e)}")
-                schedule_notifs_today(bot, show.title)
+                except Exception as e:
+                    logger.warning(f"An exception occured during send_notif: {str(e)}")
+                    schedule_notifs_today(bot, show.title)
+        else:
+            logger.info(f"No subscriptions found for {show.title}, continuing...")
+            schedule_notifs_today(bot, show.title)
     else:
         logger.warning(f"{show_check.title} was supposed to be out but isn't!")
-        for user in return_users_subbed(get_show_id_by_name(show.title)):
-            bot.sendMessage(chat_id=user, text=f"{show.title} was supposed to be out but isn't!"
-                            f"Please check the site for further information!")
+        subbed_userlist = return_users_subbed(get_show_id_by_name(show.title))
+        if subbed_userlist:
+            for user in subbed_userlist:
+                bot.sendMessage(chat_id=user, text=f"{show.title} was supposed to be out but isn't!"
+                                f"Please check the site for further information!")
 
         schedule_notifs_today(bot, show.title)
 
