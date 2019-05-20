@@ -115,7 +115,7 @@ def schedule_notifs_today(bot, last_show_title=None):
 
         elif total_time_td in range(-notif_offset, 1) and show.title != last_show_title:
             logger.info(f"{show.title} was in the offset range, ({total_time_td}) scheduling immediately...")
-            bot.loop.call_soon(send_notif, bot, show)
+            send_notif(bot, show)
 
         else:
             logger.info(f"{show.title} has already aired: {total_time_td} seconds.")
